@@ -1,20 +1,39 @@
 <template>
   <div style="display: none">
     <!-- @slot Slot for popup content -->
-    <slot/>
+    <slot />
   </div>
 </template>
 
 <script>
-import baseMixin from '../../lib/mixin'
+import withEvents from "../../lib/withEvents";
+import withSelfEvents from "./withSelfEvents";
+
+const popupEvents = {
+  open: "open",
+  close: "close"
+};
 
 /**
  * Popup component.
  * @see See [Mapbox Gl JS Popup](https://www.mapbox.com/mapbox-gl-js/api/#popup)
  */
 export default {
-  name: 'Popup',
-  mixins: [baseMixin],
+  name: "Popup",
+  mixins: [withEvents, withSelfEvents],
+
+  inject: {
+    mapbox: {
+      default: null
+    },
+    map: {
+      default: null
+    },
+    marker: {
+      default: null
+    }
+  },
+
   props: {
     /**
      * If `true`, a close button will appear in the top right corner of the popup.
@@ -40,8 +59,17 @@ export default {
      */
     anchor: {
       validator(value) {
-        let allowedValues = ['top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right']
-        return (typeof value === 'string' && allowedValues.indexOf(value) !== -1) || value === undefined
+        let allowedValues = [
+          "top",
+          "bottom",
+          "left",
+          "right",
+          "top-left",
+          "top-right",
+          "bottom-left",
+          "bottom-right"
+        ];
+        return typeof value === "string" && allowedValues.includes(value);
       },
       default: undefined
     },
@@ -74,7 +102,7 @@ export default {
     return {
       initial: true,
       popup: undefined
-    }
+    };
   },
 
   computed: {
@@ -84,86 +112,73 @@ export default {
      */
     isOpen() {
       if (this.popup !== undefined) {
-        return this.popup.isOpen()
+        return this.popup.isOpen();
       }
-      return false
+      return false;
     }
   },
 
+  created() {
+    this.popup = new this.mapbox.Popup(this.$props);
+  },
+
   mounted() {
-    this.$_checkMapTree()
+    this.$_addPopup();
+    this.initial = false;
   },
 
   beforeDestroy() {
     if (this.map) {
-      this.$_emitMapEvent('removed', { popup: this.popup })
-      this.popup.remove()
+      this.popup.remove();
+      this.$_emitEvent("removed");
     }
   },
 
   watch: {
     coordinates(lngLat) {
-      if (this.initial) return
-      this.popup.setLngLat(lngLat)
+      if (this.initial) return;
+      this.popup.setLngLat(lngLat);
     }
   },
 
   methods: {
-    $_deferredMount(payload) {
-      this.map = payload.map
-      this.$_addPopup()
-      this.initial = false
-      payload.component.$off('load', this.$_deferredMount)
-    },
-
     $_addPopup() {
-      this.popup = new this.mapbox.Popup({ ...this._props })
-      if (this.coordinates !== undefined) this.popup.setLngLat(this.coordinates)
+      this.popup = new this.mapbox.Popup(this.$props);
+      if (this.coordinates !== undefined) {
+        this.popup.setLngLat(this.coordinates);
+      }
       if (this.$slots.default !== undefined) {
         if (this.onlyText) {
           if (this.$slots.default[0].elm.nodeType === 3) {
-            let tmpEl = document.createElement('span')
-            tmpEl.appendChild(this.$slots.default[0].elm)
-            this.popup.setText(tmpEl.innerText)
+            let tmpEl = document.createElement("span");
+            tmpEl.appendChild(this.$slots.default[0].elm);
+            this.popup.setText(tmpEl.innerText);
           } else {
-            this.popup.setText(this.$slots.default[0].elm.innerText)
+            this.popup.setText(this.$slots.default[0].elm.innerText);
           }
         } else {
-          this.popup.setDOMContent(this.$slots.default[0].elm)
+          this.popup.setDOMContent(this.$slots.default[0].elm);
         }
       }
-      this.popup.addTo(this.map)
-      this.$_emitMapEvent('added', { popup: this.popup })
+      this.popup.addTo(this.map);
 
-      this.popup.on('close', this.$_onClose)
-      this.popup.on('open', this.$_onOpen)
+      this.$_bindSelfEvents(Object.keys(popupEvents), this.popup);
 
-      if (this.$parent.marker !== undefined) {
-        this.$parent.marker.setPopup(this.popup)
-      } else {
-        this.$parent.$once('added', ({ marker }) => {
-          marker.setPopup(this.popup)
-        })
+      this.$_emitEvent("added", { popup: this.popup });
+
+      if (this.marker) {
+        this.marker.setPopup(this.popup);
       }
     },
 
-    $_onClose() {
-      /**
-       * Popup close event
-       * @event close
-       * @type {object}
-       */
-      this.$_emitMapEvent('close', { popup: this.popup })
+    $_emitSelfEvent(event) {
+      this.$_emitMapEvent(event, { popup: this.popup });
     },
 
-    $_onOpen() {
-      /**
-       * Popup close event
-       * @event open
-       * @type {object}
-       */
-      this.$_emitMapEvent('open', { popup: this.popup })
+    remove() {
+      this.popup.remove();
+      this.$_emitEvent("remove", { popup: this.popup });
     }
   }
-}
+};
 </script>
